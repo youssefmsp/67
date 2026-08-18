@@ -1,9 +1,10 @@
 import streamlit as st
 import yfinance as yf
+import pandas as pd
 import random
 
 # Configuration de la page
-st.set_page_config(page_title="Trading Quest 📈", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="Trading Quest 📈", page_icon="⚡", layout="wide")
 
 # --- TRADUCTIONS (FR / EN) ---
 TEXTS = {
@@ -18,19 +19,27 @@ TEXTS = {
         "portfolio_val": "Valeur actions",
         "total_net": "Patrimoine total",
         "chest_title": "🎁 Coffre Mystère Quotidien",
-        "chest_btn": "📦 OUVRIRE LE COFFRE MYSTÈRE 🔮",
+        "chest_btn": "📦 OUVRIR LE COFFRE MYSTÈRE 🔮",
         "chest_success": "🎉 INCROYABLE ! Tu as gagné un bonus mystère de **+{gain} $** et **+30 XP** !",
         "chest_claimed": "✅ Coffre déjà réclamé ! Reviens plus tard pour un autre tirage.",
-        "market_title": "🛒 Salle des Marchés",
-        "select_company": "Choisis une entreprise star :",
+        "tabs": ["🛒 Marché & Action", "📊 Comparatif Grandes Marques", "📅 Résumé de la Semaine", "🏆 Tableau de Bord & Classement"],
+        "select_company": "Rechercher / Choisir une entreprise :",
         "quantity": "Quantité d'actions :",
         "buy_btn": "🚀 ACHETER POUR {cost:.2f} $",
         "buy_success": "💥 ACHAT SENSATIONNEL ! {qty} action(s) {sym} ajoutée(s). **+{xp} XP**",
         "no_funds": "❌ Fonds insuffisants ! Tente ta chance au coffre mystère.",
-        "error_fetch": "Erreur lors de la récupération des cours du marché.",
+        "error_fetch": "Erreur lors de la récupération des données de cette action.",
         "my_portfolio": "💼 Mon Empire Financier",
         "no_stocks": "Aucune action possédée pour l'instant.",
-        "shares": "action(s)"
+        "shares": "action(s)",
+        "summary_title": "📋 Résumé de l'Action",
+        "prev_close": "Clôture précédente",
+        "day_high": "Plus haut du jour",
+        "day_low": "Plus bas du jour",
+        "volume": "Volume d'échange",
+        "leaderboard_title": "🏆 Top Traders - Les plus gros bénéfices",
+        "weekly_summary": "📅 Performance sur 7 jours",
+        "comparison_title": "🏛️ Comparatif des Géants de la Bourse"
     },
     "EN": {
         "title": "⚡ Trading Quest",
@@ -46,20 +55,28 @@ TEXTS = {
         "chest_btn": "📦 OPEN MYSTERY CHEST 🔮",
         "chest_success": "🎉 INCREDIBLE! You won a mystery bonus of **+${gain}** and **+30 XP**!",
         "chest_claimed": "✅ Chest already claimed! Come back later for another draw.",
-        "market_title": "🛒 Trading Floor",
-        "select_company": "Select a top stock:",
+        "tabs": ["🛒 Market & Stock", "📊 Top Brands Comparison", "📅 Weekly Summary", "🏆 Leaderboard & Dashboard"],
+        "select_company": "Search / Select a company:",
         "quantity": "Share quantity:",
         "buy_btn": "🚀 BUY FOR ${cost:.2f}",
         "buy_success": "💥 EPIC PURCHASE! {qty} share(s) of {sym} added. **+{xp} XP**",
         "no_funds": "❌ Insufficient funds! Try your luck with the mystery chest.",
-        "error_fetch": "Error fetching market data.",
+        "error_fetch": "Error fetching data for this stock.",
         "my_portfolio": "💼 My Financial Empire",
         "no_stocks": "No stocks owned yet.",
-        "shares": "share(s)"
+        "shares": "share(s)",
+        "summary_title": "📋 Stock Summary",
+        "prev_close": "Previous Close",
+        "day_high": "Day High",
+        "day_low": "Day Low",
+        "volume": "Volume",
+        "leaderboard_title": "🏆 Top Traders - Highest Profits",
+        "weekly_summary": "📅 7-Day Performance",
+        "comparison_title": "🏛️ Giants Comparison Table"
     }
 }
 
-# --- BARRE LIATÉRALE : SÉLECTEUR DE LANGUE ---
+# --- BARRE LATÉRALE : SÉLECTEUR DE LANGUE ---
 st.sidebar.title("🌐 Settings / Paramètres")
 langue = st.sidebar.selectbox("Language / Langue", ["FR 🇫🇷", "EN 🇬🇧"])
 lang_code = "FR" if "FR" in langue else "EN"
@@ -78,6 +95,18 @@ if "bonus_reclame" not in st.session_state:
 # Calcul du niveau
 niveau = (st.session_state.xp // 100) + 1
 rang = t["ranks"].get(niveau, t["high_rank"])
+
+# Liste des grandes marques
+MARQUES = {
+    "Apple": "AAPL",
+    "Microsoft": "MSFT",
+    "Nvidia": "NVDA",
+    "Google (Alphabet)": "GOOGL",
+    "Amazon": "AMZN",
+    "Tesla": "TSLA",
+    "Meta (Facebook)": "META",
+    "Bitcoin ETF": "IBIT"
+}
 
 # --- EN-TÊTE DU SITE ---
 st.title(t["title"])
@@ -102,19 +131,19 @@ for sym, data in st.session_state.portefeuille.items():
         valeur_actions += data["prix_moyen"] * data["quantite"]
 
 total_patrimoine = st.session_state.solde + valeur_actions
+benefice_total = total_patrimoine - 1000.0
 
 c1, c2, c3 = st.columns(3)
 c1.metric(t["cash"], f"{st.session_state.solde:.2f} $")
 c2.metric(t["portfolio_val"], f"{valeur_actions:.2f} $")
-c3.metric(t["total_net"], f"{total_patrimoine:.2f} $", delta=f"{(total_patrimoine - 1000.0):.2f} $")
+c3.metric(t["total_net"], f"{total_patrimoine:.2f} $", delta=f"{benefice_total:.2f} $")
 
 st.divider()
 
 # --- MODULE COFFRE MYSTÈRE VISUEL ---
 st.subheader(t["chest_title"])
-
 if not st.session_state.bonus_reclame:
-    col_img, col_btn = st.columns([1, 2])
+    col_img, col_btn = st.columns([1, 3])
     with col_img:
         st.markdown("### 🧰✨")
     with col_btn:
@@ -131,46 +160,107 @@ else:
 
 st.divider()
 
-# --- ESPACE TRADING INTERACTIF ---
-st.subheader(t["market_title"])
+# --- ONGLETS PRINCIPAUX ---
+tab1, tab2, tab3, tab4 = st.tabs(t["tabs"])
 
-actions_populaires = {"Apple": "AAPL", "Tesla": "TSLA", "Nvidia": "NVDA", "Amazon": "AMZN", "Bitcoin (ETF)": "IBIT"}
-choix = st.selectbox(t["select_company"], list(actions_populaires.keys()))
-symbole = actions_populaires[choix]
+# --- ONGLET 1 : MARCHÉ & SELECTION D'ACTION ---
+with tab1:
+    st.subheader(t["select_company"])
+    choix = st.selectbox("", list(MARQUES.keys()), label_visibility="collapsed")
+    symbole = MARQUES[choix]
 
-try:
-    ticker = yf.Ticker(symbole)
-    df_hist = ticker.history(period="1mo")
-    prix_actuel = df_hist["Close"].iloc[-1]
+    try:
+        ticker = yf.Ticker(symbole)
+        df_hist = ticker.history(period="1mo")
+        info = ticker.fast_info
+        prix_actuel = df_hist["Close"].iloc[-1]
+
+        col_left, col_right = st.columns([2, 1])
+
+        with col_left:
+            st.markdown(f"### {choix} (`{symbole}`)")
+            st.write(f"**Prix en direct :** `{prix_actuel:.2f} $`")
+            st.line_chart(df_hist["Close"])
+
+            quantite = st.number_input(t["quantity"], min_value=1, value=1, step=1)
+            cout_total = prix_actuel * quantite
+
+            if st.button(t["buy_btn"].format(cost=cout_total), use_container_width=True, type="primary"):
+                if cout_total <= st.session_state.solde:
+                    st.session_state.solde -= cout_total
+                    gained_xp = 20 * quantite
+                    st.session_state.xp += gained_xp
+
+                    if symbole in st.session_state.portefeuille:
+                        st.session_state.portefeuille[symbole]["quantite"] += quantite
+                    else:
+                        st.session_state.portefeuille[symbole] = {"quantite": quantite, "prix_moyen": prix_actuel}
+
+                    st.balloons()
+                    st.success(t["buy_success"].format(qty=quantite, sym=symbole, xp=gained_xp))
+                    st.rerun()
+                else:
+                    st.error(t["no_funds"])
+
+        with col_right:
+            st.markdown(f"#### {t['summary_title']}")
+            st.metric(t["prev_close"], f"{info.get('previousClose', prix_actuel):.2f} $")
+            st.metric(t["day_high"], f"{info.get('dayHigh', prix_actuel):.2f} $")
+            st.metric(t["day_low"], f"{info.get('dayLow', prix_actuel):.2f} $")
+            st.metric(t["volume"], f"{info.get('lastVolume', 0):,}")
+
+    except Exception:
+        st.error(t["error_fetch"])
+
+# --- ONGLET 2 : COMPARATIF DE GRANDES MARQUES ---
+with tab2:
+    st.subheader(t["comparison_title"])
     
-    col_sym, col_pr = st.columns(2)
-    col_sym.write(f"### {symbole}")
-    col_pr.subheader(f"{prix_actuel:.2f} $")
+    comparaison_data = []
+    for nom, sym in MARQUES.items():
+        try:
+            t_obj = yf.Ticker(sym)
+            p = t_obj.history(period="1d")["Close"].iloc[-1]
+            prev = t_obj.fast_info.get("previousClose", p)
+            var = ((p - prev) / prev) * 100
+            comparaison_data.append({"Marque": nom, "Symbole": sym, "Prix ($)": round(p, 2), "Variation (%)": f"{var:+.2f}%"})
+        except:
+            comparaison_data.append({"Marque": nom, "Symbole": sym, "Prix ($)": "N/A", "Variation (%)": "N/A"})
 
-    st.line_chart(df_hist["Close"])
+    df_comp = pd.DataFrame(comparaison_data)
+    st.dataframe(df_comp, use_container_width=True)
 
-    quantite = st.number_input(t["quantity"], min_value=1, value=1, step=1)
-    cout_total = prix_actuel * quantite
+# --- ONGLET 3 : RÉSUMÉ DE LA SEMAINE ---
+with tab3:
+    st.subheader(t["weekly_summary"])
+    
+    weekly_data = {}
+    for nom, sym in list(MARQUES.items())[:5]:
+        try:
+            df_w = yf.Ticker(sym).history(period="7d")["Close"]
+            weekly_data[nom] = df_w
+        except:
+            pass
 
-    if st.button(t["buy_btn"].format(cost=cout_total), use_container_width=True):
-        if cout_total <= st.session_state.solde:
-            st.session_state.solde -= cout_total
-            gained_xp = 20 * quantite
-            st.session_state.xp += gained_xp
-            
-            if symbole in st.session_state.portefeuille:
-                st.session_state.portefeuille[symbole]["quantite"] += quantite
-            else:
-                st.session_state.portefeuille[symbole] = {"quantite": quantite, "prix_moyen": prix_actuel}
-                
-            st.balloons()
-            st.success(t["buy_success"].format(qty=quantite, sym=symbole, xp=gained_xp))
-            st.rerun()
-        else:
-            st.error(t["no_funds"])
-            
-except Exception:
-    st.error(t["error_fetch"])
+    if weekly_data:
+        df_weekly = pd.DataFrame(weekly_data)
+        st.line_chart(df_weekly)
+        st.dataframe(df_weekly.style.highlight_max(axis=0), use_container_width=True)
+
+# --- ONGLET 4 : TABLEAU DE BORD & CLASSEMENT ---
+with tab4:
+    st.subheader(t["leaderboard_title"])
+
+    traders_fictifs = [
+        {"Rang": "🥇 1", "Trader": "Satoshi_Trader", "Bénéfice Net": "+12 450,00 $", "Niveau": "Niveau 8"},
+        {"Rang": "🥈 2", "Trader": "WallStreet_Wolf", "Bénéfice Net": "+8 120,50 $", "Niveau": "Niveau 6"},
+        {"Rang": "🥉 3", "Trader": "CryptoKing", "Bénéfice Net": "+5 300,00 $", "Niveau": "Niveau 5"},
+        {"Rang": "4", "Trader": f"Toi ({st.session_state.get('username', 'Youssef')})", "Bénéfice Net": f"{benefice_total:+.2f} $", "Niveau": f"Niveau {niveau}"},
+        {"Rang": "5", "Trader": "Alpha_Investor", "Bénéfice Net": "-150,00 $", "Niveau": "Niveau 2"}
+    ]
+
+    df_leaderboard = pd.DataFrame(traders_fictifs)
+    st.table(df_leaderboard)
 
 st.divider()
 
