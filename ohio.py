@@ -2,16 +2,62 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import random
+import sqlite3
 import json
 
 # Configuration de la page
 st.set_page_config(page_title="Trading Quest 📈", page_icon="⚡", layout="wide")
 
+# --- BASE DE DONNÉES SQLITE (GESTION AUTO DE LA MÉMOIRE) ---
+DB_NAME = "trading_quest.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            solde REAL,
+            xp INTEGER,
+            portefeuille TEXT,
+            bonus_reclame INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def load_user_data(username):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT solde, xp, portefeuille, bonus_reclame FROM users WHERE username = ?", (username,))
+    row = c.fetchone()
+    conn.close()
+    if row:
+        return {
+            "solde": row[0],
+            "xp": row[1],
+            "portefeuille": json.loads(row[2]),
+            "bonus_reclame": bool(row[3])
+        }
+    return None
+
+def save_user_data(username, solde, xp, portefeuille, bonus_reclame):
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute('''
+        INSERT OR REPLACE INTO users (username, solde, xp, portefeuille, bonus_reclame)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (username, solde, xp, json.dumps(portefeuille), int(bonus_reclame)))
+    conn.commit()
+    conn.close()
+
+init_db()
+
 # --- TRADUCTIONS (FR / EN) ---
 TEXTS = {
     "FR": {
         "title": "⚡ Trading Quest",
-        "subtitle": "Entraîne-toi, suis tes performances et bâtis ton empire !",
+        "subtitle": "Bâtis ton empire financier en temps réel !",
         "level": "Niveau",
         "xp": "XP",
         "ranks": {1: "🟢 Novice des Marchés", 2: "🔵 Trader Averti", 3: "🟣 Analyste Senior", 4: "👑 Loup de Wall Street"},
@@ -22,12 +68,12 @@ TEXTS = {
         "chest_title": "🎁 Coffre Mystère Quotidien",
         "chest_btn": "📦 OUVRIR LE COFFRE MYSTÈRE 🔮",
         "chest_success": "🎉 INCROYABLE ! Tu as gagné un bonus mystère de **+{gain} $** et **+30 XP** !",
-        "chest_claimed": "✅ Coffre déjà réclamé ! Reviens plus tard pour un autre tirage.",
-        "tabs": ["🛒 Marché & Action", "📊 Comparatif Grandes Marques", "📅 Résumé de la Semaine", "🏆 Tableau de Bord & Statistiques"],
+        "chest_claimed": "✅ Coffre déjà réclamé !",
+        "tabs": ["🛒 Marché & Actions", "📊 Comparatif Grandes Marques", "📅 Résumé de la Semaine", "🏆 Mon Tableau de Bord"],
         "select_company": "Rechercher / Choisir une entreprise :",
         "quantity": "Quantité d'actions :",
         "buy_btn": "🚀 ACHETER POUR {cost:.2f} $",
-        "buy_success": "💥 ACHAT SENSATIONNEL ! {qty} action(s) {sym} ajoutée(s). **+{xp} XP**",
+        "buy_success": "💥 ACHAT RÉUSSI ! {qty} action(s) {sym} ajoutée(s). **+{xp} XP**",
         "no_funds": "❌ Fonds insuffisants ! Tente ta chance au coffre mystère.",
         "error_fetch": "Erreur lors de la récupération des données de cette action.",
         "my_portfolio": "💼 Mon Empire Financier",
@@ -38,19 +84,19 @@ TEXTS = {
         "day_high": "Plus haut du jour",
         "day_low": "Plus bas du jour",
         "volume": "Volume d'échange",
-        "leaderboard_title": "🏆 Bilan Personnel du Joueur",
+        "leaderboard_title": "🏆 Bilan de ton Compte",
         "weekly_summary": "📅 Performance sur 7 jours",
         "comparison_title": "🏛️ Comparatif des Géants de la Bourse",
-        "sidebar_profile": "👤 Configuration du Profil",
-        "username_label": "Ton Pseudo :",
-        "save_load_title": "💾 Sauvegarde & Restauration",
-        "download_save": "📥 Télécharger la sauvegarde (JSON)",
-        "upload_save": "📤 Charger une sauvegarde (JSON)",
-        "save_success": "✅ Données restaurées avec succès !"
+        "login_section": "👤 Connexion / Profil",
+        "username_prompt": "Entre ton Pseudo :",
+        "login_btn": "💾 Charger / Créer mon Profil",
+        "reset_btn": "⚠️ Réinitialiser ma progression",
+        "welcome": "Bienvenue",
+        "auto_save_info": "🔒 Vos données sont sauvegardées automatiquement."
     },
     "EN": {
         "title": "⚡ Trading Quest",
-        "subtitle": "Practice, track your stats, and build your empire!",
+        "subtitle": "Build your financial empire in real time!",
         "level": "Level",
         "xp": "XP",
         "ranks": {1: "🟢 Market Novice", 2: "🔵 Savvy Trader", 3: "🟣 Senior Analyst", 4: "👑 Wall Street Wolf"},
@@ -61,12 +107,12 @@ TEXTS = {
         "chest_title": "🎁 Daily Mystery Chest",
         "chest_btn": "📦 OPEN MYSTERY CHEST 🔮",
         "chest_success": "🎉 INCREDIBLE! You won a mystery bonus of **+${gain}** and **+30 XP**!",
-        "chest_claimed": "✅ Chest already claimed! Come back later for another draw.",
-        "tabs": ["🛒 Market & Stock", "📊 Top Brands Comparison", "📅 Weekly Summary", "🏆 Dashboard & Stats"],
+        "chest_claimed": "✅ Chest already claimed!",
+        "tabs": ["🛒 Market & Stocks", "📊 Top Brands Comparison", "📅 Weekly Summary", "🏆 My Dashboard"],
         "select_company": "Search / Select a company:",
         "quantity": "Share quantity:",
         "buy_btn": "🚀 BUY FOR ${cost:.2f}",
-        "buy_success": "💥 EPIC PURCHASE! {qty} share(s) of {sym} added. **+{xp} XP**",
+        "buy_success": "💥 PURCHASE SUCCESSFUL! {qty} share(s) of {sym} added. **+{xp} XP**",
         "no_funds": "❌ Insufficient funds! Try your luck with the mystery chest.",
         "error_fetch": "Error fetching data for this stock.",
         "my_portfolio": "💼 My Financial Empire",
@@ -77,82 +123,90 @@ TEXTS = {
         "day_high": "Day High",
         "day_low": "Day Low",
         "volume": "Volume",
-        "leaderboard_title": "🏆 Personal Player Dashboard",
+        "leaderboard_title": "🏆 Account Overview",
         "weekly_summary": "📅 7-Day Performance",
         "comparison_title": "🏛️ Giants Comparison Table",
-        "sidebar_profile": "👤 Profile Setup",
-        "username_label": "Your Username:",
-        "save_load_title": "💾 Save & Restore",
-        "download_save": "📥 Download Save File (JSON)",
-        "upload_save": "📤 Upload Save File (JSON)",
-        "save_success": "✅ Game state restored successfully!"
+        "login_section": "👤 Profile & Login",
+        "username_prompt": "Enter your Username:",
+        "login_btn": "💾 Load / Create Profile",
+        "reset_btn": "⚠️ Reset my progress",
+        "welcome": "Welcome",
+        "auto_save_info": "🔒 Your progress is automatically saved."
     }
 }
 
-# --- INITIALISATION DE L'ÉTAT (SESSION STATE) ---
-if "username" not in st.session_state:
-    st.session_state.username = "Youssef"
-if "solde" not in st.session_state:
-    st.session_state.solde = 1000.0
-if "xp" not in st.session_state:
-    st.session_state.xp = 0
-if "portefeuille" not in st.session_state:
-    st.session_state.portefeuille = {}
-if "bonus_reclame" not in st.session_state:
-    st.session_state.bonus_reclame = False
+# --- INITIALISATION DE LA SESSION ---
+if "user_loaded" not in st.session_state:
+    st.session_state.user_loaded = False
 
-# --- BARRE LATÉRALE RÉTRACTABLE (MENU ☰) ---
+# --- BARRE LATÉRALE (MENU ☰) ---
 st.sidebar.title("☰ Menu")
 
-# Langue
+# Choix de la langue
 langue = st.sidebar.selectbox("🌐 Language / Langue", ["FR 🇫🇷", "EN 🇬🇧"])
 lang_code = "FR" if "FR" in langue else "EN"
 t = TEXTS[lang_code]
 
 st.sidebar.divider()
 
-# Setup du Pseudo
-st.sidebar.subheader(t["sidebar_profile"])
-new_username = st.sidebar.text_input(t["username_label"], value=st.session_state.username)
-if new_username:
-    st.session_state.username = new_username
+# Gestion du Compte / Connexion
+st.sidebar.subheader(t["login_section"])
+input_username = st.sidebar.text_input(t["username_prompt"], value=st.session_state.get("username", "Youssef"))
 
-st.sidebar.divider()
+if st.sidebar.button(t["login_btn"], use_container_width=True):
+    if input_username.strip():
+        data = load_user_data(input_username.strip())
+        st.session_state.username = input_username.strip()
+        if data:
+            st.session_state.solde = data["solde"]
+            st.session_state.xp = data["xp"]
+            st.session_state.portefeuille = data["portefeuille"]
+            st.session_state.bonus_reclame = data["bonus_reclame"]
+        else:
+            st.session_state.solde = 1000.0
+            st.session_state.xp = 0
+            st.session_state.portefeuille = {}
+            st.session_state.bonus_reclame = False
+            save_user_data(st.session_state.username, 1000.0, 0, {}, False)
+        st.session_state.user_loaded = True
+        st.rerun()
 
-# Gestion de la mémoire (Sauvegarde & Restauration)
-st.sidebar.subheader(t["save_load_title"])
+# Si première ouverture sans validation
+if not st.session_state.user_loaded:
+    st.session_state.username = input_username.strip() if input_username.strip() else "Youssef"
+    data = load_user_data(st.session_state.username)
+    if data:
+        st.session_state.solde = data["solde"]
+        st.session_state.xp = data["xp"]
+        st.session_state.portefeuille = data["portefeuille"]
+        st.session_state.bonus_reclame = data["bonus_reclame"]
+    else:
+        st.session_state.solde = 1000.0
+        st.session_state.xp = 0
+        st.session_state.portefeuille = {}
+        st.session_state.bonus_reclame = False
+    st.session_state.user_loaded = True
 
-# Exportation des données
-data_to_save = {
-    "username": st.session_state.username,
-    "solde": st.session_state.solde,
-    "xp": st.session_state.xp,
-    "portefeuille": st.session_state.portefeuille,
-    "bonus_reclame": st.session_state.bonus_reclame
-}
-json_save = json.dumps(data_to_save, indent=4)
+st.sidebar.caption(t["auto_save_info"])
 
-st.sidebar.download_button(
-    label=t["download_save"],
-    data=json_save,
-    file_name=f"trading_quest_{st.session_state.username}.json",
-    mime="application/json",
-    use_container_width=True
-)
+# Option de réinitialisation
+if st.sidebar.button(t["reset_btn"], use_container_width=True):
+    st.session_state.solde = 1000.0
+    st.session_state.xp = 0
+    st.session_state.portefeuille = {}
+    st.session_state.bonus_reclame = False
+    save_user_data(st.session_state.username, 1000.0, 0, {}, False)
+    st.rerun()
 
-# Importation des données
-uploaded_file = st.sidebar.file_uploader(t["upload_save"], type=["json"])
-if uploaded_file is not None:
-    try:
-        loaded_data = json.load(uploaded_file)
-        st.session_state.username = loaded_data.get("username", st.session_state.username)
-        st.session_state.solde = loaded_data.get("solde", st.session_state.solde)
-        st.session_state.xp = loaded_data.get("xp", st.session_state.xp)
-        st.session_state.portefeuille = loaded_data.get("portefeuille", st.session_state.portefeuille)
-        st.session_state.bonus_reclame = loaded_data.get("bonus_reclame", st.session_state.bonus_reclame)
-        st.sidebar.success(t["save_success"])
-    except Exception:
-        st.sidebar.error("Erreur lors du chargement du fichier JSON.")
+# Helper pour sauvegarder automatiquement après chaque modif
+def sync_data():
+    save_user_data(
+        st.session_state.username,
+        st.session_state.solde,
+        st.session_state.xp,
+        st.session_state.portefeuille,
+        st.session_state.bonus_reclame
+    )
 
 # Calcul du niveau
 niveau = (st.session_state.xp // 100) + 1
@@ -171,7 +225,7 @@ MARQUES = {
 
 # --- PAGE PRINCIPALE ---
 st.title(t["title"])
-st.caption(f"{t['subtitle']} | **Joueur :** `{st.session_state.username}`")
+st.caption(f"{t['subtitle']} | **{t['welcome']} :** `{st.session_state.username}`")
 
 # Barre de niveau & XP
 col_lvl, col_xp = st.columns([1, 2])
@@ -213,6 +267,7 @@ if not st.session_state.bonus_reclame:
             st.session_state.solde += gain
             st.session_state.xp += 30
             st.session_state.bonus_reclame = True
+            sync_data()
             st.balloons()
             st.success(t["chest_success"].format(gain=gain))
             st.rerun()
@@ -257,6 +312,7 @@ with tab1:
                     else:
                         st.session_state.portefeuille[symbole] = {"quantite": quantite, "prix_moyen": prix_actuel}
 
+                    sync_data()
                     st.balloons()
                     st.success(t["buy_success"].format(qty=quantite, sym=symbole, xp=gained_xp))
                     st.rerun()
