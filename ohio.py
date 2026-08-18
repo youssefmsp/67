@@ -2,7 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import random
-from streamlit_javascript import st_javascript
 
 # Configuration de la page
 st.set_page_config(page_title="Trading Quest 📈", page_icon="⚡", layout="wide")
@@ -48,7 +47,7 @@ TEXTS = {
         "setup_sub": "Crée ton profil pour commencer ton aventure sur les marchés financiers.",
         "username_prompt": "Choisis ton Pseudo de Trader :",
         "start_btn": "🚀 Créer mon empire & Jouer",
-        "logout_btn": "🚪 Déconnexion",
+        "logout_btn": "🚪 Déconnexion / Nouveau Profil",
         "welcome": "Bienvenue"
     },
     "EN": {
@@ -90,7 +89,7 @@ TEXTS = {
         "setup_sub": "Create your profile to start your journey in financial markets.",
         "username_prompt": "Choose your Trader Username:",
         "start_btn": "🚀 Create My Empire & Play",
-        "logout_btn": "🚪 Logout",
+        "logout_btn": "🚪 Logout / New Profile",
         "welcome": "Welcome"
     }
 }
@@ -101,7 +100,7 @@ langue = st.sidebar.selectbox("🌐 Language / Langue", ["FR 🇫🇷", "EN 🇬
 lang_code = "FR" if "FR" in langue else "EN"
 t = TEXTS[lang_code]
 
-# --- GESTION DU PROFIL & DE LA MÉMOIRE DU NAVIGATEUR ---
+# --- GESTION DU PROFIL ET SESSIONS ---
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "solde" not in st.session_state:
@@ -129,7 +128,7 @@ if not st.session_state.logged_in:
                 st.rerun()
     st.stop()
 
-# Bouton de déconnexion dans la barre latérale
+# Bouton de réinitialisation/déconnexion
 if st.sidebar.button(t["logout_btn"], use_container_width=True):
     st.session_state.logged_in = False
     st.rerun()
