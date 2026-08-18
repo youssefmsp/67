@@ -14,7 +14,6 @@ st.set_page_config(
 # --- STYLE CSS SUR-MESURE ---
 st.markdown("""
     <style>
-    /* Dark Theme Pro & Dynamic Spacing */
     .stApp {
         background-color: #0E1117;
         color: #E0E6ED;
@@ -22,13 +21,6 @@ st.markdown("""
     div[data-testid="stMetricValue"] {
         font-size: 1.8rem !important;
         font-weight: 700;
-    }
-    .main-card {
-        background: #161B22;
-        border: 1px solid #30363D;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 20px;
     }
     .stButton>button {
         border-radius: 8px;
@@ -54,17 +46,17 @@ TEXTS = {
         "cash": "Cash disponible",
         "portfolio_val": "Portefeuille Actions",
         "total_net": "Patrimoine Net",
-        "chest_title": "🎁 Bonus Quotidien & Recompenses",
+        "chest_title": "🎁 Bonus Quotidien & Récompenses",
         "chest_btn": "⚡ RÉCLAMER LE BONUS QUOTIDIEN 🔮",
         "chest_success": "🎉 INCROYABLE ! Tu as reçu un bonus de **+{gain} $** et **+30 XP** !",
-        "chest_claimed": "✅ Recompense du jour déjà réclamée !",
+        "chest_claimed": "✅ Récompense du jour déjà réclamée !",
         "tabs": ["📈 Trading Desk", "🏛️ Comparatif Marché", "📊 Vues & Tendances 7J", "🏆 Bilan & Stats"],
         "select_company": "Sélectionner un actif :",
         "quantity": "Quantité de titres :",
-        "buy_btn": "🚀 ACHETER ({cost:.2f} $)",
-        "sell_btn": "💸 VENDRE ({revenue:.2f} $)",
-        "buy_success": "💥 ACHAT VALIDE ! {qty} x {sym}. (+{xp} XP)",
-        "sell_success": "💰 VENTE VALIDÉE ! {qty} x {sym} pour {revenue:.2f} $. (+{xp} XP)",
+        "buy_btn": "🚀 ACHETER POUR {cost:,.2f} $",
+        "sell_btn": "💸 VENDRE POUR {revenue:,.2f} $",
+        "buy_success": "💥 ACHAT VALIDÉ ! {qty} x {sym} pour {cost:,.2f} $. (+{xp} XP)",
+        "sell_success": "💰 VENTE VALIDÉE ! {qty} x {sym} pour {revenue:,.2f} $. (+{xp} XP)",
         "no_funds": "❌ Fonds insuffisants pour exécuter cet ordre.",
         "no_shares": "❌ Position insuffisante pour vendre cette quantité.",
         "error_fetch": "Erreur d'accès aux données du marché.",
@@ -84,6 +76,7 @@ TEXTS = {
         "username_prompt": "Identifiant / Pseudo Trader :",
         "start_btn": "🚀 Lancer le Terminal",
         "logout_btn": "🚪 Déconnexion",
+        "refresh_btn": "🔄 Actualiser les cours",
         "welcome": "Session Active"
     },
     "EN": {
@@ -103,10 +96,10 @@ TEXTS = {
         "tabs": ["📈 Trading Desk", "🏛️ Market Overview", "📊 7-Day Trends", "🏆 Profile & Stats"],
         "select_company": "Select Asset:",
         "quantity": "Share Quantity:",
-        "buy_btn": "🚀 BUY ({cost:.2f} $)",
-        "sell_btn": "💸 SELL ({revenue:.2f} $)",
-        "buy_success": "💥 ORDER FILLED! {qty} x {sym}. (+{xp} XP)",
-        "sell_success": "💰 POSITION CLOSED! {qty} x {sym} for ${revenue:.2f}. (+{xp} XP)",
+        "buy_btn": "🚀 BUY FOR ${cost:,.2f}",
+        "sell_btn": "💸 SELL FOR ${revenue:,.2f}",
+        "buy_success": "💥 ORDER FILLED! {qty} x {sym} for ${cost:,.2f}. (+{xp} XP)",
+        "sell_success": "💰 POSITION CLOSED! {qty} x {sym} for ${revenue:,.2f}. (+{xp} XP)",
         "no_funds": "❌ Insufficient cash to execute order.",
         "no_shares": "❌ Insufficient shares to sell.",
         "error_fetch": "Error fetching market data.",
@@ -126,6 +119,7 @@ TEXTS = {
         "username_prompt": "Trader Handle / Username:",
         "start_btn": "🚀 Launch Terminal",
         "logout_btn": "🚪 Logout",
+        "refresh_btn": "🔄 Refresh Market Data",
         "welcome": "Active Session"
     }
 }
@@ -135,6 +129,10 @@ st.sidebar.title("☰ Terminal Options")
 langue = st.sidebar.selectbox("🌐 Langue / Language", ["FR 🇫🇷", "EN 🇬🇧"])
 lang_code = "FR" if "FR" in langue else "EN"
 t = TEXTS[lang_code]
+
+# Bouton de rafraîchissement manuel
+if st.sidebar.button(t["refresh_btn"], use_container_width=True):
+    st.rerun()
 
 # --- INITIALISATION DE SESSION ---
 if "logged_in" not in st.session_state:
@@ -255,13 +253,21 @@ with tab1:
 
         with c_desk1:
             st.markdown(f"### {choix} (`{symbole}`)")
-            st.markdown(f"**Prix en direct :** `{prix_actuel:,.2f} $`")
+            st.markdown(f"**Prix unitaire en direct :** `{prix_actuel:,.2f} $`")
             st.line_chart(df_hist["Close"], height=280)
 
+            # Saisie de la quantité (calcul réactif automatique à la saisie)
             quantite = st.number_input(t["quantity"], min_value=1, value=1, step=1)
+            
+            # CALCUL AUTOMATIQUE DE LA SOMME TOTALE
             total_val = prix_actuel * quantite
 
+            # Affichage en direct du montant total calculé
+            st.info(f"💵 **Total estimé : {total_val:,.2f} $** ({quantite} × {prix_actuel:,.2f} $)")
+
             btn_b, btn_s = st.columns(2)
+            
+            # Bouton d'achat réactif
             with btn_b:
                 if st.button(t["buy_btn"].format(cost=total_val), use_container_width=True, type="primary"):
                     if total_val <= st.session_state.solde:
@@ -273,11 +279,12 @@ with tab1:
                         else:
                             st.session_state.portefeuille[symbole] = {"quantite": quantite, "prix_moyen": prix_actuel}
                         st.balloons()
-                        st.success(t["buy_success"].format(qty=quantite, sym=symbole, xp=g_xp))
+                        st.success(t["buy_success"].format(qty=quantite, sym=symbole, cost=total_val, xp=g_xp))
                         st.rerun()
                     else:
                         st.error(t["no_funds"])
 
+            # Bouton de vente réactif
             with btn_s:
                 if st.button(t["sell_btn"].format(revenue=total_val), use_container_width=True):
                     if symbole in st.session_state.portefeuille and st.session_state.portefeuille[symbole]["quantite"] >= quantite:
@@ -332,7 +339,7 @@ with tab3:
         st.line_chart(df_w)
         st.dataframe(df_w.style.highlight_max(axis=0), use_container_width=True)
 
-# --- TAB 4 : STATS & DATORAMA ---
+# --- TAB 4 : STATS ---
 with tab4:
     st.subheader(t["leaderboard_title"])
     stats_data = [
