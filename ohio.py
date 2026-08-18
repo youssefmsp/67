@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import random
+import json
 
 # Configuration de la page
 st.set_page_config(page_title="Trading Quest 📈", page_icon="⚡", layout="wide")
@@ -10,7 +11,7 @@ st.set_page_config(page_title="Trading Quest 📈", page_icon="⚡", layout="wid
 TEXTS = {
     "FR": {
         "title": "⚡ Trading Quest",
-        "subtitle": "Débloque des niveaux, tente ta chance et bâtis ton empire !",
+        "subtitle": "Entraîne-toi, suis tes performances et bâtis ton empire !",
         "level": "Niveau",
         "xp": "XP",
         "ranks": {1: "🟢 Novice des Marchés", 2: "🔵 Trader Averti", 3: "🟣 Analyste Senior", 4: "👑 Loup de Wall Street"},
@@ -22,7 +23,7 @@ TEXTS = {
         "chest_btn": "📦 OUVRIR LE COFFRE MYSTÈRE 🔮",
         "chest_success": "🎉 INCROYABLE ! Tu as gagné un bonus mystère de **+{gain} $** et **+30 XP** !",
         "chest_claimed": "✅ Coffre déjà réclamé ! Reviens plus tard pour un autre tirage.",
-        "tabs": ["🛒 Marché & Action", "📊 Comparatif Grandes Marques", "📅 Résumé de la Semaine", "🏆 Tableau de Bord & Classement"],
+        "tabs": ["🛒 Marché & Action", "📊 Comparatif Grandes Marques", "📅 Résumé de la Semaine", "🏆 Tableau de Bord & Statistiques"],
         "select_company": "Rechercher / Choisir une entreprise :",
         "quantity": "Quantité d'actions :",
         "buy_btn": "🚀 ACHETER POUR {cost:.2f} $",
@@ -37,13 +38,19 @@ TEXTS = {
         "day_high": "Plus haut du jour",
         "day_low": "Plus bas du jour",
         "volume": "Volume d'échange",
-        "leaderboard_title": "🏆 Top Traders - Les plus gros bénéfices",
+        "leaderboard_title": "🏆 Bilan Personnel du Joueur",
         "weekly_summary": "📅 Performance sur 7 jours",
-        "comparison_title": "🏛️ Comparatif des Géants de la Bourse"
+        "comparison_title": "🏛️ Comparatif des Géants de la Bourse",
+        "sidebar_profile": "👤 Configuration du Profil",
+        "username_label": "Ton Pseudo :",
+        "save_load_title": "💾 Sauvegarde & Restauration",
+        "download_save": "📥 Télécharger la sauvegarde (JSON)",
+        "upload_save": "📤 Charger une sauvegarde (JSON)",
+        "save_success": "✅ Données restaurées avec succès !"
     },
     "EN": {
         "title": "⚡ Trading Quest",
-        "subtitle": "Unlock levels, try your luck and build your empire!",
+        "subtitle": "Practice, track your stats, and build your empire!",
         "level": "Level",
         "xp": "XP",
         "ranks": {1: "🟢 Market Novice", 2: "🔵 Savvy Trader", 3: "🟣 Senior Analyst", 4: "👑 Wall Street Wolf"},
@@ -55,7 +62,7 @@ TEXTS = {
         "chest_btn": "📦 OPEN MYSTERY CHEST 🔮",
         "chest_success": "🎉 INCREDIBLE! You won a mystery bonus of **+${gain}** and **+30 XP**!",
         "chest_claimed": "✅ Chest already claimed! Come back later for another draw.",
-        "tabs": ["🛒 Market & Stock", "📊 Top Brands Comparison", "📅 Weekly Summary", "🏆 Leaderboard & Dashboard"],
+        "tabs": ["🛒 Market & Stock", "📊 Top Brands Comparison", "📅 Weekly Summary", "🏆 Dashboard & Stats"],
         "select_company": "Search / Select a company:",
         "quantity": "Share quantity:",
         "buy_btn": "🚀 BUY FOR ${cost:.2f}",
@@ -70,19 +77,21 @@ TEXTS = {
         "day_high": "Day High",
         "day_low": "Day Low",
         "volume": "Volume",
-        "leaderboard_title": "🏆 Top Traders - Highest Profits",
+        "leaderboard_title": "🏆 Personal Player Dashboard",
         "weekly_summary": "📅 7-Day Performance",
-        "comparison_title": "🏛️ Giants Comparison Table"
+        "comparison_title": "🏛️ Giants Comparison Table",
+        "sidebar_profile": "👤 Profile Setup",
+        "username_label": "Your Username:",
+        "save_load_title": "💾 Save & Restore",
+        "download_save": "📥 Download Save File (JSON)",
+        "upload_save": "📤 Upload Save File (JSON)",
+        "save_success": "✅ Game state restored successfully!"
     }
 }
 
-# --- BARRE LATÉRALE : SÉLECTEUR DE LANGUE ---
-st.sidebar.title("🌐 Settings / Paramètres")
-langue = st.sidebar.selectbox("Language / Langue", ["FR 🇫🇷", "EN 🇬🇧"])
-lang_code = "FR" if "FR" in langue else "EN"
-t = TEXTS[lang_code]
-
 # --- INITIALISATION DE L'ÉTAT (SESSION STATE) ---
+if "username" not in st.session_state:
+    st.session_state.username = "Youssef"
 if "solde" not in st.session_state:
     st.session_state.solde = 1000.0
 if "xp" not in st.session_state:
@@ -92,11 +101,63 @@ if "portefeuille" not in st.session_state:
 if "bonus_reclame" not in st.session_state:
     st.session_state.bonus_reclame = False
 
+# --- BARRE LATÉRALE RÉTRACTABLE (MENU ☰) ---
+st.sidebar.title("☰ Menu")
+
+# Langue
+langue = st.sidebar.selectbox("🌐 Language / Langue", ["FR 🇫🇷", "EN 🇬🇧"])
+lang_code = "FR" if "FR" in langue else "EN"
+t = TEXTS[lang_code]
+
+st.sidebar.divider()
+
+# Setup du Pseudo
+st.sidebar.subheader(t["sidebar_profile"])
+new_username = st.sidebar.text_input(t["username_label"], value=st.session_state.username)
+if new_username:
+    st.session_state.username = new_username
+
+st.sidebar.divider()
+
+# Gestion de la mémoire (Sauvegarde & Restauration)
+st.sidebar.subheader(t["save_load_title"])
+
+# Exportation des données
+data_to_save = {
+    "username": st.session_state.username,
+    "solde": st.session_state.solde,
+    "xp": st.session_state.xp,
+    "portefeuille": st.session_state.portefeuille,
+    "bonus_reclame": st.session_state.bonus_reclame
+}
+json_save = json.dumps(data_to_save, indent=4)
+
+st.sidebar.download_button(
+    label=t["download_save"],
+    data=json_save,
+    file_name=f"trading_quest_{st.session_state.username}.json",
+    mime="application/json",
+    use_container_width=True
+)
+
+# Importation des données
+uploaded_file = st.sidebar.file_uploader(t["upload_save"], type=["json"])
+if uploaded_file is not None:
+    try:
+        loaded_data = json.load(uploaded_file)
+        st.session_state.username = loaded_data.get("username", st.session_state.username)
+        st.session_state.solde = loaded_data.get("solde", st.session_state.solde)
+        st.session_state.xp = loaded_data.get("xp", st.session_state.xp)
+        st.session_state.portefeuille = loaded_data.get("portefeuille", st.session_state.portefeuille)
+        st.session_state.bonus_reclame = loaded_data.get("bonus_reclame", st.session_state.bonus_reclame)
+        st.sidebar.success(t["save_success"])
+    except Exception:
+        st.sidebar.error("Erreur lors du chargement du fichier JSON.")
+
 # Calcul du niveau
 niveau = (st.session_state.xp // 100) + 1
 rang = t["ranks"].get(niveau, t["high_rank"])
 
-# Liste des grandes marques
 MARQUES = {
     "Apple": "AAPL",
     "Microsoft": "MSFT",
@@ -108,9 +169,9 @@ MARQUES = {
     "Bitcoin ETF": "IBIT"
 }
 
-# --- EN-TÊTE DU SITE ---
+# --- PAGE PRINCIPALE ---
 st.title(t["title"])
-st.caption(t["subtitle"])
+st.caption(f"{t['subtitle']} | **Joueur :** `{st.session_state.username}`")
 
 # Barre de niveau & XP
 col_lvl, col_xp = st.columns([1, 2])
@@ -163,7 +224,7 @@ st.divider()
 # --- ONGLETS PRINCIPAUX ---
 tab1, tab2, tab3, tab4 = st.tabs(t["tabs"])
 
-# --- ONGLET 1 : MARCHÉ & SELECTION D'ACTION ---
+# --- ONGLET 1 : MARCHÉ & SÉLECTION D'ACTION ---
 with tab1:
     st.subheader(t["select_company"])
     choix = st.selectbox("", list(MARQUES.keys()), label_visibility="collapsed")
@@ -247,20 +308,22 @@ with tab3:
         st.line_chart(df_weekly)
         st.dataframe(df_weekly.style.highlight_max(axis=0), use_container_width=True)
 
-# --- ONGLET 4 : TABLEAU DE BORD & CLASSEMENT ---
+# --- ONGLET 4 : TABLEAU DE BORD & STATISTIQUES RÉELLES ---
 with tab4:
     st.subheader(t["leaderboard_title"])
 
-    traders_fictifs = [
-        {"Rang": "🥇 1", "Trader": "Satoshi_Trader", "Bénéfice Net": "+12 450,00 $", "Niveau": "Niveau 8"},
-        {"Rang": "🥈 2", "Trader": "WallStreet_Wolf", "Bénéfice Net": "+8 120,50 $", "Niveau": "Niveau 6"},
-        {"Rang": "🥉 3", "Trader": "CryptoKing", "Bénéfice Net": "+5 300,00 $", "Niveau": "Niveau 5"},
-        {"Rang": "4", "Trader": f"Toi ({st.session_state.get('username', 'Youssef')})", "Bénéfice Net": f"{benefice_total:+.2f} $", "Niveau": f"Niveau {niveau}"},
-        {"Rang": "5", "Trader": "Alpha_Investor", "Bénéfice Net": "-150,00 $", "Niveau": "Niveau 2"}
+    stats_joueur = [
+        {"Indicateur": "Pseudo", "Valeur": st.session_state.username},
+        {"Indicateur": "Niveau Actuel", "Valeur": f"Niveau {niveau} ({rang})"},
+        {"Indicateur": "XP Cumulé", "Valeur": f"{st.session_state.xp} XP"},
+        {"Indicateur": "Cash Disponible", "Valeur": f"{st.session_state.solde:.2f} $"},
+        {"Indicateur": "Valeur Portefeuille", "Valeur": f"{valeur_actions:.2f} $"},
+        {"Indicateur": "Patrimoine Total", "Valeur": f"{total_patrimoine:.2f} $"},
+        {"Indicateur": "Bénéfice/Perte Nette", "Valeur": f"{benefice_total:+.2f} $"}
     ]
 
-    df_leaderboard = pd.DataFrame(traders_fictifs)
-    st.table(df_leaderboard)
+    df_stats = pd.DataFrame(stats_joueur)
+    st.table(df_stats)
 
 st.divider()
 
